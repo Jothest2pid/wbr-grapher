@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Word Relationship Graph</title>
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        #graph {
+            width: 100%;
+            height: 400px;
+            border: 1px solid #ccc;
+            margin-top: 20px;
+        }
+        .input-group {
+            margin-bottom: 10px;
+        }
+        #wordList {
+            margin-top: 20px;
+        }
+        #bulkInput {
+            width: 100%;
+            height: 100px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Word Relationship Graph</h1>
+    <div class="input-group">
+        <input type="text" id="wordInput" placeholder="Enter a word">
+        <button id="addWordBtn">Add Word</button>
+    </div>
+    <div class="input-group">
+        <select id="fromWord"></select>
+        <select id="toWord"></select>
+        <select id="relationshipType">
+            <option value="beats">🤜 beats</option>
+            <option value="doesNotBeat">😵 does not beat</option>
+        </select>
+        <button id="connectWordsBtn">Connect Words</button>
+    </div>
+    <div class="input-group">
+        <textarea id="bulkInput" placeholder="Enter relationships (e.g., 'Donald Trump 😵 Democrats 🤜 Deregulation')"></textarea>
+        <button id="processBulkBtn">Process Bulk Input</button>
+    </div>
+    <div class="input-group">
+        <button id="saveDataBtn">Save Data</button>
+    </div>
+    <div class="input-group">
+        <input type="file" id="loadFileInput">
+        <button id="loadDataBtn">Load Data</button>
+    </div>
+    <div id="graph"></div>
+    <div id="wordList"></div>
+
+    <script>
+        let nodes, edges, network;
+
+        function initGraph() {
+            nodes = new vis.DataSet();
+            edges = new vis.DataSet();
+            let container = document.getElementById('graph');
+            let data = {
+                nodes: nodes,
+                edges: edges
+            };
+            let options = {
+                layout: {
+                    hierarchical: {
+                        direction: 'LR', // Left to Right
+                        sortMethod: 'directed',
+                        nodeSpacing: 100,
+                        levelSeparation: 200
+                    }
+                },
+                edges: {
+                    arrows: {
+                        to: { enabled: true, scaleFactor: 1 }
+                    },
+                    smooth: {
+                        type: 'cubicBezier',
+                        forceDirection: 'horizontal',
+                        roundness: 0.4
+                    }
+                }
+            };
+            network = new vis.Network(container, data, options);
+
+            // Add event listeners
+            document.getElementById('addWordBtn').addEventListener('click', addWord);
+            document.getElementById('connectWordsBtn').addEventListener('click', connectWords);
+            document.getElementById('processBulkBtn').addEventListener('click', processBulkInput);
+            document.getElementById('saveDataBtn').addEventListener('click', saveData);
+            document.getElementById('loadDataBtn').addEventListener('click', loadData);
+            document.getElementById('wordInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    addWord();
+                }
+            });
+        }
+
+        function addWord() {
+            let word = document.getElementById('wordInput').value.trim().toLowerCase();
+            if (word && !nodes.get(word)) {
+                nodes.add({id: word, label: word});
+                updateWordList();
+                document.getElementById('wordInput').value = '';
+            }
+        }
+
+        function connectWords() {
+            let fromWord = document.getElementById('fromWord').value.toLowerCase();
+            let toWord = document.getElementById('toWord').value.toLowerCase();
+            let relationshipType = document.getElementById('relationshipType').value;
+            addRelationship(fromWord, toWord, relationshipType);
+        }
+
+        function addRelationship(fromWord, toWord, relationshipType) {
+            if (fromWord && toWord && fromWord !== toWord) {
+                let edgeColor = relationshipType === 'beats' ? 'green' : 'red';
+                let edgeLabel = relationshipType === 'beats' ? '🤜' : '😵';
+                
+                if (!nodes.get(fromWord)) {
+                    nodes.add({id: fromWord, label: fromWord});
+                }
+                if (!nodes.get(toWord)) {
+                    nodes.add({id: toWord, label: toWord});
+                }
+                
+                edges.add({
+                    from: fromWord,
+                    to: toWord,
+                    label: edgeLabel,
+                    color: {color: edgeColor},
+                    font: {align: 'middle'}
+                });
+            }
+        }
+
+        function processBulkInput() {
+            let input = document.getElementById('bulkInput').value.trim().toLowerCase();
+            let lines = input.split('\n');
+            
+            lines.forEach(line => {
+                let parts = line.split(/(\s🤜\s|\s😵\s)/);
+                let currentWord = '';
+                let relationshipType = '';
+
+                for (let i = 0; i < parts.length; i++) {
+                    let part = parts[i].trim();
+                    if (part === '🤜') {
+                        relationshipType = 'beats';
+                    } else if (part === '😵') {
+                        relationshipType = 'doesNotBeat';
+                    } else if (part !== '') {
+                        if (currentWord === '') {
+                            currentWord = part;
+                        } else {
+                            addRelationship(currentWord, part, relationshipType);
+                            currentWord = part;
+                            relationshipType = '';
+                        }
+                    }
+                }
+            });
+            updateWordList();
+        }
+
+        function updateWordList() {
+            let wordList = document.getElementById('wordList');
+            let fromSelect = document.getElementById('fromWord');
+            let toSelect = document.getElementById('toWord');
+            
+            wordList.innerHTML = '<h3>Words:</h3>';
+            fromSelect.innerHTML = '';
+            toSelect.innerHTML = '';
+
+            nodes.forEach(node => {
+                wordList.innerHTML += `<p>${node.label}</p>`;
+                let option = document.createElement('option');
+                option.value = node.id;
+                option.textContent = node.label;
+                fromSelect.appendChild(option.cloneNode(true));
+                toSelect.appendChild(option);
+            });
+        }
+
+        function saveData() {
+            let chains = [];
+            let standalone = [];
+            let processedNodes = new Set();
+
+            edges.forEach(edge => {
+                let from = nodes.get(edge.from).label;
+                let to = nodes.get(edge.to).label;
+                let relationship = edge.label === '🤜' ? '🤜' : '😵';
+
+                if (!processedNodes.has(from)) {
+                    let chain = [from];
+                    processedNodes.add(from);
+                    let currentNode = to;
+                    while (currentNode) {
+                        chain.push(relationship);
+                        chain.push(currentNode);
+                        processedNodes.add(currentNode);
+                        let nextEdge = edges.get({
+                            filter: function (item) {
+                                return item.from === currentNode;
+                            }
+                        })[0];
+                        if (nextEdge) {
+                            currentNode = nodes.get(nextEdge.to).label;
+                            relationship = nextEdge.label;
+                        } else {
+                            currentNode = null;
+                        }
+                    }
+                    chains.push(chain.join(' '));
+                }
+            });
+
+            nodes.forEach(node => {
+                if (!processedNodes.has(node.id)) {
+                    standalone.push(node.label);
+                }
+            });
+
+            let data = chains.concat(standalone).join('\n');
+            let blob = new Blob([data], { type: 'text/plain' });
+            let url = URL.createObjectURL(blob);
+            let a = document.createElement('a');
+            a.href = url;
+            a.download = 'word_relationships.txt';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function loadData() {
+            let fileInput = document.getElementById('loadFileInput');
+            let file = fileInput.files[0];
+            if (file) {
+                let reader = new FileReader();
+                reader.onload = function(e) {
+                    let content = e.target.result;
+                    document.getElementById('bulkInput').value = content.toLowerCase();
+                    processBulkInput();
+                };
+                reader.readAsText(file);
+            }
+        }
+
+        // Initialize the graph when the page loads
+        window.onload = initGraph;
+    </script>
+</body>
+</html>
